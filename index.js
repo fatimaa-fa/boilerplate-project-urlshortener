@@ -23,48 +23,35 @@ app.listen(port, function() {
   console.log(`Listening on port ${port}`);
 });
 
-//first instruction
-fetch('https://example.com/api/shorturl', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({ original_url: url })
-})
-  .then(response => response.json())
-  .then(data => {
-    console.log('Original URL:', data.original_url);
-    console.log('Shortened URL:', data.short_url);
-  })
-  .catch(error => console.error('Error:', error));
+const validUrl = require('valid-url');
+const shortid = require('shortid');
 
-//second one
+let urlDatabase = {};  // In-memory storage for URL mappings
 
-fetch(`https://example.com/api/shorturl/${shortUrl}`)
-  .then(response => {
-    if (response.redirected) {
-      console.log('Redirecting to:', response.url);
-      window.location.href = response.url; // This will actually redirect the user
-    }
-  })
-  .catch(error => console.error('Error:', error));
+// POST: /api/shorturl to shorten URL
+app.post('/api/shorturl', express.json(), (req, res) => {
+  const { url } = req.body;
 
-  //third one
+  if (!validUrl.isUri(url)) {
+    return res.json({ error: 'invalid url' });
+  }
 
-fetch('https://example.com/api/shorturl', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({ original_url: url })
-})
-  .then(response => response.json())
-  .then(data => {
-    if (data.error) {
-      console.log('Error:', data.error); // Will print: 'invalid url'
-    } else {
-      console.log('Original URL:', data.original_url);
-      console.log('Shortened URL:', data.short_url);
-    }
-  })
-  .catch(error => console.error('Error:', error));
+  const shortUrl = shortid.generate();
+  urlDatabase[shortUrl] = url;
+
+  res.json({
+    original_url: url,
+    short_url: shortUrl,
+  });
+});
+
+// GET: /api/shorturl/<short_url> to redirect to original URL
+app.get('/api/shorturl/:shortUrl', (req, res) => {
+  const shortUrl = req.params.shortUrl;
+
+  if (urlDatabase[shortUrl]) {
+    return res.redirect(urlDatabase[shortUrl]);
+  } else {
+    return res.json({ error: 'No short URL found for given input' });
+  }
+});
