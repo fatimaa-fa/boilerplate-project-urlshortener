@@ -23,35 +23,40 @@ app.listen(port, function() {
   console.log(`Listening on port ${port}`);
 });
 
-const validUrl = require('valid-url');
-const shortid = require('shortid');
+const dns = require('dns');
+const bodyParser = require('body-parser');
 
-let urlDatabase = {};  // In-memory storage for URL mappings
+let urlDatabase = {};
+let id = 1;
 
-// POST: /api/shorturl to shorten URL
-app.post('/api/shorturl', express.json(), (req, res) => {
-  const { url } = req.body;
+app.use(bodyParser.urlencoded({ extended: false }));
 
-  if (!validUrl.isUri(url)) {
-    return res.json({ error: 'invalid url' });
+app.post('/api/shorturl', (req, res) => {
+  const originalUrl = req.body.url;
+
+  try {
+    const urlObj = new URL(originalUrl);
+    dns.lookup(urlObj.hostname, (err) => {
+      if (err) return res.json({ error: 'invalid url' });
+
+      const shortUrl = id++;
+      urlDatabase[shortUrl] = originalUrl;
+
+      res.json({
+        original_url: originalUrl,
+        short_url: shortUrl,
+      });
+    });
+  } catch {
+    res.json({ error: 'invalid url' });
   }
-
-  const shortUrl = shortid.generate();
-  urlDatabase[shortUrl] = url;
-
-  res.json({
-    original_url: url,
-    short_url: shortUrl,
-  });
 });
 
-// GET: /api/shorturl/<short_url> to redirect to original URL
 app.get('/api/shorturl/:shortUrl', (req, res) => {
-  const shortUrl = req.params.shortUrl;
-
-  if (urlDatabase[shortUrl]) {
-    return res.redirect(urlDatabase[shortUrl]);
+  const originalUrl = urlDatabase[req.params.shortUrl];
+  if (originalUrl) {
+    res.redirect(originalUrl);
   } else {
-    return res.json({ error: 'No short URL found for given input' });
+    res.json({ error: 'No short URL found for given input' });
   }
 });
